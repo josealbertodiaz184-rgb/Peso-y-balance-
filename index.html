@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Peso y Balance - MD-82 YV664T</title>
+    <!-- Chart.js CDN para gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #121824; color: #fff; margin: 0; padding: 20px; }
+        .container { display: flex; flex-wrap: wrap; gap: 20px; max-width: 1200px; margin: auto; }
+        .card { background: #1e293b; padding: 20px; border-radius: 8px; flex: 1; min-width: 320px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        h2 { border-bottom: 2px solid #38bdf8; padding-bottom: 8px; color: #38bdf8; font-size: 1.2rem; }
+        .input-group { margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+        label { font-size: 0.9rem; color: #cbd5e1; }
+        input { width: 100px; padding: 6px; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff; text-align: right; }
+        .results { font-weight: bold; font-size: 1.1rem; margin-top: 15px; }
+        .status-ok { color: #4ade80; }
+        .status-alert { color: #f87171; }
+    </style>
+</head>
+<body>
+
+<h1 style="text-align: center; color: #38bdf8;">Cálculo de Peso y Balance (Loadsheet Web)</h1>
+
+<div class="container">
+    <!-- Formulario de Entrada de Datos -->
+    <div class="card">
+        <h2>1. Entrada de Carga y Combustible</h2>
+        <div class="input-group">
+            <label>DOW (Dry Operating Weight - kg):</label>
+            <input type="number" id="dow" value="37223" oninput="calcularWB()">
+        </div>
+        <div class="input-group">
+            <label>DOI (Dry Operating Index):</label>
+            <input type="number" id="doi" value="48.5" step="0.1" oninput="calcularWB()">
+        </div>
+        <div class="input-group">
+            <label>Pasajeros Total (PAX):</label>
+            <input type="number" id="pax" value="120" oninput="calcularWB()">
+        </div>
+        <div class="input-group">
+            <label>Carga Bodegas (kg):</label>
+            <input type="number" id="cargo" value="1800" oninput="calcularWB()">
+        </div>
+        <div class="input-group">
+            <label>Combustible de Despegue (Takeoff Fuel - kg):</label>
+            <input type="number" id="fuel" value="8500" oninput="calcularWB()">
+        </div>
+
+        <h2>2. Resultados Calculados</h2>
+        <div class="results">Zero Fuel Weight (ZFW): <span id="zfw">0</span> kg</div>
+        <div class="results">Takeoff Weight (TOW): <span id="tow">0</span> kg</div>
+        <div class="results">% MAC Calculado: <span id="mac">0</span>%</div>
+        <div class="results" id="statusBox">Estado: <span class="status-ok">DENTRO DE LÍMITES</span></div>
+    </div>
+
+    <!-- Gráfica del Envolvente de CG -->
+    <div class="card">
+        <h2>3. Envolvente de Centro de Gravedad (% MAC vs Peso)</h2>
+        <canvas id="cgChart"></canvas>
+    </div>
+</div>
+
+<script>
+// Polígono del Envolvente de CG (Puntos X: %MAC, Y: Peso en kg)
+const cgEnvelope = [
+    { x: 14, y: 37000 },
+    { x: 14, y: 54400 },
+    { x: 20, y: 64800 },
+    { x: 33, y: 64800 },
+    { x: 33, y: 37000 },
+    { x: 14, y: 37000 } // Cierre del polígono
+];
+
+let myChart;
+
+function initChart() {
+    const ctx = document.getElementById('cgChart').getContext('2d');
+    myChart = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+            datasets: [
+                {
+                    label: 'Envolvente de Vuelo (Límites)',
+                    data: cgEnvelope,
+                    showLine: true,
+                    borderColor: '#94a3b8',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    fill: false
+                },
+                {
+                    label: 'Punto TOW',
+                    data: [{ x: 22, y: 55000 }],
+                    backgroundColor: '#38bdf8',
+                    pointRadius: 8
+                }
+            ]
+        },
+        options: {
+            scales: {
+                x: { title: { display: true, text: '% MAC', color: '#fff' }, min: 10, max: 38 },
+                y: { title: { display: true, text: 'Peso (kg)', color: '#fff' }, min: 35000, max: 70000 }
+            },
+            plugins: { legend: { labels: { color: '#fff' } } }
+        }
+    });
+}
+
+function calcularWB() {
+    // 1. Obtener datos del formulario
+    const dow = parseFloat(document.getElementById('dow').value) || 0;
+    const doi = parseFloat(document.getElementById('doi').value) || 0;
+    const pax = parseFloat(document.getElementById('pax').value) || 0;
+    const cargo = parseFloat(document.getElementById('cargo').value) || 0;
+    const fuel = parseFloat(document.getElementById('fuel').value) || 0;
+
+    // 2. Cálculos matemáticos simplificados
+    const pesoPax = pax * 75; // Peso promedio estándar 75kg
+    const zfw = dow + pesoPax + cargo;
+    const tow = zfw + fuel;
+
+    // Fórmula lineal de aproximación del %MAC según el peso y las cargas
+    const deltaIndex = (pesoPax * 0.02) + (cargo * 0.01) + (fuel * 0.005);
+    const indexFinal = doi + deltaIndex;
+    const macCalculado = (indexFinal * 0.45).toFixed(1);
+
+    // 3. Actualizar la interfaz
+    document.getElementById('zfw').innerText = zfw.toLocaleString();
+    document.getElementById('tow').innerText = tow.toLocaleString();
+    document.getElementById('mac').innerText = macCalculado;
+
+    // 4. Validación de Límites (MTOW Max: 64,800 kg)
+    const statusBox = document.getElementById('statusBox');
+    if (tow > 64800 || macCalculado < 14 || macCalculado > 33) {
+        statusBox.innerHTML = 'Estado: <span class="status-alert">¡FUERA DE LÍMITES!</span>';
+        myChart.data.datasets[1].backgroundColor = '#f87171';
+    } else {
+        statusBox.innerHTML = 'Estado: <span class="status-ok">DENTRO DE LÍMITES</span>';
+        myChart.data.datasets[1].backgroundColor = '#4ade80';
+    }
+
+    // 5. Actualizar el punto en la gráfica
+    myChart.data.datasets[1].data = [{ x: macCalculado, y: tow }];
+    myChart.update();
+}
+
+// Inicializar la gráfica al cargar la página
+window.onload = function() {
+    initChart();
+    calcularWB();
+};
+</script>
+
+</body>
+</html>
